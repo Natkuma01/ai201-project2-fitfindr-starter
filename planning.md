@@ -131,19 +131,22 @@ For each tool, describe the specific failure mode you're handling and what the a
 ---
 
 ## A Complete Interaction (Step by Step)
+The FitFindr takes the user’s text query and chosen wardrobe, then turn that into a search, outfit idea, and fit card. 
+The search_listings function from the tools.py is triggered first by the parsed query and returns matching thrift listings. If it finds nothing, the app stops and displays an error. If a listing is found, suggest_outfit is triggered next with the selected item and the user’s wardrobe to create styling ideas. 
+Lastly, create_fit_card function makes a short caption from the outfit suggestion and item details.
 
 Write out what a full user interaction looks like from start to finish — tool call by tool call. Use a specific example query.
 
 **Example user query:** "I'm looking for a vintage graphic tee under $30. I mostly wear baggy jeans and chunky sneakers. What's out there and how would I style it?"
 
 **Step 1:**
-<!-- What does the agent do first? Which tool is called? With what input? -->
+Now the agent reads the query, pulls out the item description, size, and price, and calls the serach_listing function from the tools.py file, with that info.
 
 **Step 2:**
-<!-- What happens next? What was returned from step 1? What tool is called now? -->
+The seach_listings function retrn matching thrift items, the agent picks the best one, and then calls the suggest_outfit function with that item plus the user's wardrobe
 
 **Step 3:**
-<!-- Continue until the full interaction is complete -->
+The suggest_outfit function returns styling ideas, and the agent calls the create_fit_card function with the outfit text and the selected item.
 
 **Final output to user:**
-<!-- What does the user actually see at the end? -->
+The user gets the top listing, a simple outfit suggestion, and a short fit card caption.
