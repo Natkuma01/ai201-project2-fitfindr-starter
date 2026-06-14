@@ -126,15 +126,76 @@ For each tool, describe the specific failure mode you're handling and what the a
 ---
 
 ## Architecture
+The actual diagram refers to the milestone2_archtecture.png in the root directory
+```mermaid
+flowchart TD
+    %% Input
+    Query["User input query & wardrobe choice"] --> UI["Gradio UI (app.py)"]
+    
+    %% UI Level check
+    UI --> CheckQuery{Is query empty?}
+    CheckQuery -->|Yes| ErrUI["[ERROR] 'Please enter a query...' &rarr; return"]
+    CheckQuery -->|No| Loop["Planning Loop (run_agent)"]
+    
+    %% Step 1: Parse Query
+    Loop --> T_Parse["parse_query(query)"]
+    T_Parse --> S_Parsed["Session: parsed = {description, size, max_price}"]
+    
+    %% Step 2: Search Listings
+    S_Parsed --> T_Search["search_listings(description, size, max_price)"]
+    T_Search --> DbRead[("Load data/listings.json")]
+    DbRead --> FilterScore["Filter by size & max_price<br/>Score description word overlap<br/>(Drop score = 0 matches)"]
+    
+    %% Step 3: Check Results
+    FilterScore --> CheckResults{Are search results empty?}
+    
+    %% Error Path (No results found)
+    CheckResults -->|Yes| Err["[ERROR] 'No listings found...' &rarr; return"]
+    Err --> S_Error["Session: error = 'No listings...'"]
+    
+    %% Success Path
+    CheckResults -->|No| S_Selected["Session: selected_item = results[0]"]
+    
+    %% Step 4: Suggest Outfit
+    S_Selected --> T_Suggest["suggest_outfit(selected_item, wardrobe)"]
+    T_Suggest --> CheckWardrobe{Is wardrobe empty?}
+    
+    CheckWardrobe -->|Yes| LLM_General["Prompt Groq:<br/>General styling advice"]
+    CheckWardrobe -->|No| LLM_Wardrobe["Prompt Groq:<br/>Outfit combinations with wardrobe items"]
+    
+    LLM_General --> S_Outfit["Session: outfit_suggestion = '...'"]
+    LLM_Wardrobe --> S_Outfit
+    
+    %% Step 5: Fit Card
+    S_Outfit --> T_FitCard["create_fit_card(outfit_suggestion, new_item)"]
+    T_FitCard --> CheckOutfit{Is outfit empty or missing?}
+    
+    CheckOutfit -->|Yes| Card_Error["Return error string directly<br/>'Error: Cannot generate fit card...'"]
+    CheckOutfit -->|No| LLM_Caption["Prompt Groq:<br/>2-4 sentence OOTD caption"]
+    
+    Card_Error --> S_FitCard_Err["Session: fit_card = 'Error: Cannot...'"]
+    LLM_Caption --> S_FitCard_Success["Session: fit_card = '...'"]
+    
+    %% Final Return
+    S_FitCard_Success --> Ret["Return session / Display outputs"]
+    S_FitCard_Err --> Ret
+    S_Error -->|error path returns here| Ret
+    ErrUI --> Ret
 
-<!-- Draw a diagram of your agent showing how the components connect:
-     User input → Planning Loop → Tools (search_listings, suggest_outfit, create_fit_card)
-                                                                          ↕
-                                                                   State / Session
-     Show what triggers each tool, how state flows between them, and where error paths branch off.
-     ASCII art, a Mermaid diagram (https://mermaid.js.org/syntax/flowchart.html), or an embedded
-     sketch are all fine. You'll share this diagram with an AI tool when asking it to implement
-     the planning loop and each individual tool. -->
+    %% Styling definitions
+    classDef default fill:#F8FAFC,stroke:#1E293B,stroke-width:1.5px,color:#0F172A,font-family:monospace;
+    classDef error fill:#FFF1F2,stroke:#E11D48,stroke-width:1.5px,color:#9F1239,font-family:monospace;
+    classDef session fill:#F1F5F9,stroke:#475569,stroke-width:1px,color:#334155,font-family:monospace;
+    classDef loop fill:#EFF6FF,stroke:#2563EB,stroke-width:1.5px,color:#1E40AF,font-family:monospace;
+    classDef decision fill:#FFFDE7,stroke:#EAB308,stroke-width:1.5px,color:#854D0E,font-family:monospace;
+    classDef external fill:#F5F3FF,stroke:#7C3AED,stroke-width:1.5px,color:#5B21B6,font-family:monospace;
+    
+    class Loop,UI loop;
+    class Err,S_Error,Card_Error,ErrUI,S_FitCard_Err error;
+    class S_Parsed,S_Selected,S_Outfit,S_FitCard_Success session;
+    class CheckQuery,CheckResults,CheckWardrobe,CheckOutfit decision;
+    class LLM_General,LLM_Wardrobe,LLM_Caption,DbRead,FilterScore,T_Parse,T_Search,T_Suggest,T_FitCard external;
+```
 
 ---
 
