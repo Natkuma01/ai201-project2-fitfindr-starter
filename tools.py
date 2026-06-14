@@ -282,10 +282,12 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     """
     # Guard against an empty or whitespace-only outfit string.
     if not outfit or not outfit.strip():
-        return "Error: Cannot generate fit card because no outfit suggestion is available."
+        return (
+            "⛔️ Error: Cannot generate fit card because there are no outfit match with your item. I suggest you do not buy this item! ☠️💀🤢"
+        )
         
     if not new_item or not isinstance(new_item, dict):
-        return "Error: Cannot generate fit card because the thrift item details are missing."
+        return "⚠️ Error: Cannot generate fit card because the thrift item details are missing. 🛍️"
 
     client = _get_groq_client()
 
@@ -298,6 +300,9 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     system_prompt = (
         "You are a trendy, authentic fashion influencer writing outfit captions for TikTok and Instagram. "
         "Your style is conversational, casual, and relatable, using natural expressions rather than hard marketing copy. "
+        "IMPORTANT: Always include highly relevant emojis to match the style vibe of the caption. "
+        "For example: use ☀️ or 🏖️ for summer/sunny/warm vibes, ☕ or 💖 for casual/everyday/errand vibes, "
+        "🍂 or 🧥 for autumn/winter vibes, 🎸 or 🖤 for grunge/alternative vibes, 🎀 for cottagecore, etc. "
         "Do not write introductory text, explanations, or quotes. Only output the caption."
     )
     
@@ -335,4 +340,4 @@ Style Guidelines:
         return caption
     except Exception as e:
         print(f"Error generating fit card: {e}")
-        return f"Error: Failed to generate fit card caption due to an API error. ({e})"
+        return f"❌ Error: Failed to generate fit card caption due to an API error. ({e}) ⚠️"

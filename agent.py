@@ -184,7 +184,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     session["search_results"] = results
 
     if not results:
-        session["error"] = "No listings match your search"
+        session["error"] = "🔍 No listings match your search. Try adjusting your keywords! 🛍️"
         return session
 
     # Step 4: Select the item to use (e.g., the top result).

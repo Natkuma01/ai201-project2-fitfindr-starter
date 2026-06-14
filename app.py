@@ -46,7 +46,7 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
 
     # 1. Guard against an empty query
     if not user_query or not user_query.strip():
-        return "Error: Please enter an item you want to search for.", "", ""
+        return "⚠️ Error: Please enter an item you want to search for. 🔍", "", ""
 
     # 2. Select the wardrobe based on wardrobe_choice
     wardrobe = get_example_wardrobe() if wardrobe_choice == "Example wardrobe" else get_empty_wardrobe()
@@ -62,7 +62,7 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
     # and return it along with session["outfit_suggestion"] and session["fit_card"].
     selected_item = session.get("selected_item")
     if not selected_item:
-        return "Error: No listing was selected. Please try a different query.", "", ""
+        return "❌ Error: No listing was selected. Please try a different query. 🔍", "", ""
 
     brand = selected_item.get("brand") or "Unknown brand"
     price = selected_item.get("price")

@@ -173,8 +173,8 @@ def test_create_fit_card_empty_outfit():
     new_item = {"title": "Vintage Tee", "price": 20.0, "platform": "depop"}
     res1 = create_fit_card("", new_item)
     res2 = create_fit_card("   ", new_item)
-    assert "Error: Cannot generate fit card because no outfit suggestion is available." in res1
-    assert "Error: Cannot generate fit card because no outfit suggestion is available." in res2
+    assert "Error: Cannot generate fit card because there are no outfit match with your item." in res1
+    assert "Error: Cannot generate fit card because there are no outfit match with your item." in res2
 
 
 def test_create_fit_card_invalid_item():
