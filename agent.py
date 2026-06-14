@@ -18,6 +18,7 @@ Usage (once implemented):
     print(result["error"])   # None on success
 """
 
+import re
 from tools import search_listings, suggest_outfit, create_fit_card
 
 
@@ -46,6 +47,80 @@ def _new_session(query: str, wardrobe: dict) -> dict:
 
 
 # ── planning loop ─────────────────────────────────────────────────────────────
+
+def parse_query(query: str) -> dict:
+    """
+    Extract structured search parameters from user's natural language query.
+    Pulls out description, optional size, and optional price ceiling.
+    """
+    if not query or not query.strip():
+        return {"description": "", "size": None, "max_price": None}
+
+    # Extract max_price
+    max_price = None
+    price_span = None
+    # Match patterns like: under $30, under 30, $30, below 30
+    price_match = re.search(r'\b(?:under|below|less\s+than)?\s*\$\s*(\d+(?:\.\d+)?)', query, re.IGNORECASE)
+    if not price_match:
+        price_match = re.search(r'\b(?:under|below|less\s+than)\s+(\d+(?:\.\d+)?)', query, re.IGNORECASE)
+    
+    if price_match:
+        try:
+            max_price = float(price_match.group(1))
+            price_span = price_match.span()
+        except ValueError:
+            pass
+
+    # Extract size
+    size = None
+    size_span = None
+    # Match patterns like: size M, size XXS, size 8, size: M
+    size_match = re.search(r'\bsize\s*[:\s]\s*([a-zA-Z0-9/+-]+)', query, re.IGNORECASE)
+    if size_match:
+        size = size_match.group(1)
+        size_span = size_match.span()
+
+    # Construct description by removing the matched spans
+    spans = []
+    if price_span:
+        spans.append(price_span)
+    if size_span:
+        spans.append(size_span)
+    
+    # Sort spans in descending order to remove without altering preceding indices
+    spans.sort(key=lambda x: x[0], reverse=True)
+    
+    desc_chars = list(query)
+    for start, end in spans:
+        desc_chars[start:end] = [' '] * (end - start)
+        
+    description = "".join(desc_chars)
+    description = re.sub(r'\s+', ' ', description).strip()
+    description = description.strip(',.?!;:- ')
+    
+    # Clean up trailing prepositions/connectors
+    while True:
+        prev_desc = description
+        description = re.sub(r'\b(?:in|under|for|at|size|with|and|a|an|the|looking|to|im|looking\s+for)\b\s*$', '', description, flags=re.IGNORECASE).strip()
+        description = description.strip(',.?!;:- ')
+        if description == prev_desc:
+            break
+            
+    # Clean up leading prepositions/connectors
+    while True:
+        prev_desc = description
+        description = re.sub(r'^\b(?:looking\s+for|im\s+looking\s+for|i\s+am\s+looking\s+for|looking\s+to\s+find|looking|for|a|an|the|i|im|find)\b\s*', '', description, flags=re.IGNORECASE).strip()
+        description = description.strip(',.?!;:- ')
+        if description == prev_desc:
+            break
+            
+    return {
+        "description": description,
+        "size": size,
+        "max_price": max_price
+    }
+
+
 
 def run_agent(query: str, wardrobe: dict) -> dict:
     """
@@ -92,9 +167,39 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Before writing code, complete the Planning Loop and State Management sections
     of planning.md — your implementation should match what you described there.
     """
-    # TODO: implement the planning loop
+    # Step 1: Initialize the session with _new_session().
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # Step 2: Parse the user's query to extract a description, size, and max_price.
+    parsed = parse_query(query)
+    session["parsed"] = parsed
+
+    # Step 3: Call search_listings() with the parsed parameters.
+    # Store results in session["search_results"].
+    results = search_listings(
+        description=parsed["description"],
+        size=parsed["size"],
+        max_price=parsed["max_price"]
+    )
+    session["search_results"] = results
+
+    if not results:
+        session["error"] = "No listings match your search"
+        return session
+
+    # Step 4: Select the item to use (e.g., the top result).
+    selected_item = results[0]
+    session["selected_item"] = selected_item
+
+    # Step 5: Call suggest_outfit() with the selected item and wardrobe.
+    outfit = suggest_outfit(selected_item, wardrobe)
+    session["outfit_suggestion"] = outfit
+
+    # Step 6: Call create_fit_card() with the outfit suggestion and selected item.
+    fit_card = create_fit_card(outfit, selected_item)
+    session["fit_card"] = fit_card
+
+    # Step 7: Return the session.
     return session
 
 
