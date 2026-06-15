@@ -2,7 +2,7 @@
 
 This starter kit contains everything you need to begin Project 2.
 
-## What's Included
+## 📦 What's Included
 
 ```
 ai201-project2-fitfindr-starter/
@@ -15,7 +15,7 @@ ai201-project2-fitfindr-starter/
 └── requirements.txt           # Python dependencies
 ```
 
-## Setup
+## ⚙️ Setup
 
 ```bash
 pip install -r requirements.txt
@@ -26,7 +26,7 @@ Set your Groq API key in a `.env` file (get a free key at [console.groq.com](htt
 GROQ_API_KEY=your_key_here
 ```
 
-## Required and Additional Tools
+## 🔧 Required and Additional Tools
 
 - Required tool #1: `search_listings(description: str, size: str | None, max_price: float | None)`
   - Returns a list of matching listing dictionaries sorted by best match.
@@ -42,7 +42,7 @@ GROQ_API_KEY=your_key_here
   - Returns a dict with `description` (str), `size` (str or None), and `max_price` (float or None).
   - If the query is too vague, it can return an empty description and `None` for size and price.
 
-## The Mock Listings Dataset
+## 💾 The Mock Listings Dataset
 
 `data/listings.json` contains 40 mock secondhand listings across categories (tops, bottoms, outerwear, shoes, accessories) and styles (vintage, y2k, grunge, cottagecore, streetwear, and more).
 
@@ -54,7 +54,7 @@ from utils.data_loader import load_listings
 listings = load_listings()
 ```
 
-## The Wardrobe Schema
+## 👕 The Wardrobe Schema
 
 `data/wardrobe_schema.json` defines the format your agent uses to represent a user's existing wardrobe. It includes:
 
@@ -68,7 +68,7 @@ from utils.data_loader import get_example_wardrobe
 wardrobe = get_example_wardrobe()
 ```
 
-## Where to Start
+## 🚀 Where to Start
 
 1. **Read `planning.md` and fill it out before writing any code.**
 2. Verify the data loads correctly by running `python utils/data_loader.py`.
@@ -78,7 +78,7 @@ Your implementation files go in this same directory. There's no required file st
 
 ---
 
-## State Management
+## 🧠 State Management
 
 The agent stores all the information it needs in a single session dictionary during each run. The session is created when the run starts and tracks the following values:
 
@@ -100,7 +100,7 @@ Information flows between the tools using the session dictionary:
 
 ---
 
-## Planning Loop and Conditional Logic
+## 🔁 Planning Loop and Conditional Logic
 
 The planning loop manages the steps the agent takes. It uses the following decisions:
 
@@ -116,29 +116,29 @@ The planning loop manages the steps the agent takes. It uses the following decis
 
 ---
 
-## Error Handling and Testing Examples
+## 🚨 Error Handling and Testing Examples
 
 Here is what happens when each tool fails:
 
 | Tool | What Failed | Agent's Response | Testing Example |
 |------|-------------|------------------|-----------------|
-| `search_listings` | No listings match the search terms. | Stops the run early and shows a friendly message suggesting the user try broader keywords. | `test_search_empty_results` returns an empty list `[]` for a designer gown search. |
-| `search_listings` | Listing dataset has invalid or missing price data. | Skips the corrupted listing and continues matching other items. | `test_search_listings_invalid_price` successfully ignores a non-numeric price item. |
-| `suggest_outfit` | Wardrobe has no items. | Falls back to giving general styling advice instead of crashing. | `test_suggest_outfit_empty_wardrobe` formats the prompt for general styling advice. |
-| `suggest_outfit` | The Groq API fails. | Catches the error and returns a friendly fallback suggestion with support code `OUTFIT_GEN_01`. | `test_suggest_outfit_api_failure` mocks an API crash and verifies the fallback string. |
-| `create_fit_card` | Outfit suggestion is missing or empty. | Returns a message telling the user to get a valid styling suggestion first. | `test_create_fit_card_empty_outfit` checks that empty strings return a custom message. |
-| `create_fit_card` | The Groq API fails. | Catches the error and returns a message explaining the failure with a suggestion statement. | `test_create_fit_card_api_failure` simulates a rate limit and verifies the fallback string. |
+| `search_listings` | No listings match the search terms. | - Stops the run early<br/>- shows a friendly message suggesting the user try broader keywords | `test_search_empty_results` returns an empty list `[]` for a designer gown search. |
+| `search_listings` | Listing dataset has invalid or missing price data. | - Skips the corrupted listing<br/>- continues matching other items | `test_search_listings_invalid_price` successfully ignores a non-numeric price item. |
+| `suggest_outfit` | Wardrobe has no items. | - Falls back to giving general styling advice<br/>- avoids crashing or raising exception | `test_suggest_outfit_empty_wardrobe` formats the prompt for general styling advice. |
+| `suggest_outfit` | The Groq API fails. | - Catches the error<br/>- returns friendly fallback suggestions and support code OUTFIT_GEN_01 | `test_suggest_outfit_api_failure` mocks an API crash and verifies the fallback string. |
+| `create_fit_card` | Outfit suggestion is missing or empty. | - Stops generation<br/>- returns a message telling the user to get a styling suggestion first | `test_create_fit_card_empty_outfit` checks that empty strings return a custom message. |
+| `create_fit_card` | The Groq API fails. | - Catches the error<br/>- returns a message explaining the failure with a suggestion statement | `test_create_fit_card_api_failure` simulates a rate limit and verifies the fallback string. |
 
 ---
 
-## Spec Reflection
+## 📝 Spec Reflection
 
 - **How the spec helped**: The clear inputs and outputs specified for each tool made it easy to write clean prompts for the LLM.
 - **Divergence and why**: We added a helper tool called `parse_query`. The original spec did not mention query parsing, but we created it to separate extraction from matching logic.
 
 ---
 
-## AI Tool Use Reflection
+## 🤖 AI Tool Use Reflection
 
 - **Instance 1 (Regex query parser)**: I directed the AI to write a regex parser to extract price limits and sizes. I reviewed the code and revised it because it failed on compound sizes like "S/M" and left messy prepositions in the product description.
 - **Instance 2 (API failure testing)**: I directed the AI to write unit tests for Groq API errors. I reviewed the code and overrode it to patch our helper function `_get_groq_client` rather than `groq.Groq` directly so the tests would run correctly.
