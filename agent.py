@@ -19,7 +19,7 @@ Usage (once implemented):
 """
 
 import re
-from tools import search_listings, suggest_outfit, create_fit_card
+from tools import search_listings, suggest_outfit, create_fit_card, assess_price
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -43,6 +43,8 @@ def _new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # string returned by suggest_outfit
         "fit_card": None,            # string returned by create_fit_card
         "error": None,               # set if the interaction ended early
+        "adjustment_note": None,     # explanation of relaxed filters
+        "price_assessment": None,    # price comparison string
     }
 
 
@@ -183,16 +185,44 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     )
     session["search_results"] = results
 
+    adjustment_note = None
     if not results:
-        session["error"] = (
-            "🔍 No listings match your search. "
-            "Suggestion: Try searching for a different item description, removing size/price filters, or using broader keywords! 🛍️"
-        )
-        return session
+        # Retry logic: loosen constraints automatically if size or price filters are set
+        if parsed["max_price"] is not None and parsed["size"] is not None:
+            # Try 1: Remove max_price limit (keep size)
+            results = search_listings(description=parsed["description"], size=parsed["size"], max_price=None)
+            if results:
+                adjustment_note = f"Could not find any items matching your budget of ${parsed['max_price']:.2f}. Showing items in size {parsed['size']} without budget limits."
+        
+        if not results and parsed["size"] is not None:
+            # Try 2: Remove size limit (keep max_price if it was there, or keep None)
+            results = search_listings(description=parsed["description"], size=None, max_price=parsed["max_price"])
+            if results:
+                budget_str = f" under ${parsed['max_price']:.2f}" if parsed["max_price"] is not None else ""
+                adjustment_note = f"Could not find any items in size {parsed['size']}. Showing items matching your description{budget_str} in all sizes."
+                
+        if not results and (parsed["size"] is not None or parsed["max_price"] is not None):
+            # Try 3: Remove both filters
+            results = search_listings(description=parsed["description"], size=None, max_price=None)
+            if results:
+                adjustment_note = "Could not find matches with your size and budget filters. Showing matches in all sizes and budgets."
+
+        if results:
+            session["search_results"] = results
+            session["adjustment_note"] = adjustment_note
+        else:
+            session["error"] = (
+                "🔍 No listings match your search. "
+                "Suggestion: Try searching for a different item description, removing size/price filters, or using broader keywords! 🛍️"
+            )
+            return session
 
     # Step 4: Select the item to use (e.g., the top result).
     selected_item = results[0]
     session["selected_item"] = selected_item
+    
+    # Calculate price assessment
+    session["price_assessment"] = assess_price(selected_item)
 
     # Step 5: Call suggest_outfit() with the selected item and wardrobe.
     outfit = suggest_outfit(selected_item, wardrobe)
@@ -220,6 +250,7 @@ if __name__ == "__main__":
         print(f"Error: {session['error']}")
     else:
         print(f"Found: {session['selected_item']['title']}")
+        print(f"Price Assessment: {session['price_assessment']}")
         print(f"\nOutfit: {session['outfit_suggestion']}")
         print(f"\nFit card: {session['fit_card']}")
 
@@ -239,3 +270,16 @@ if __name__ == "__main__":
         )
         print(f"Agent outfit suggestion fallback: {session3['outfit_suggestion']}")
         print(f"Agent fit card fallback: {session3['fit_card']}")
+
+    print("\n\n=== Zero-Result Search with Loosened Constraints Retry ===\n")
+    session4 = run_agent(
+        query="vintage graphic tee size S under $5",
+        wardrobe=get_example_wardrobe(),
+    )
+    if session4["error"]:
+        print(f"Error: {session4['error']}")
+    else:
+        if session4.get("adjustment_note"):
+            print(f"Adjustment Note: {session4['adjustment_note']}")
+        print(f"Found: {session4['selected_item']['title']}")
+        print(f"Price Assessment: {session4['price_assessment']}")

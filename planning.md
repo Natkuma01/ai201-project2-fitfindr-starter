@@ -88,21 +88,26 @@ If the query is empty or too vague to extract anything useful, return a dict wit
 ## Planning Loop
 
 **How does your agent decide which tool to call next?**
-1. Start with user query -> call parse_query to extract description, size, and max_price, store in session["parsed"]
+1. **Initialize & Parse**: The agent starts with the user query, calls `parse_query` to extract the description, optional size, and optional max price, and stores them in `session["parsed"]`.
 
-2. Call search_listings with parsed parameters -> get back search_results, store in session["search_results"]
+2. **Search Listings**: It calls `search_listings` with the parsed description, size, and max price.
 
-3. Check if search_results is empty:
-   - **If yes:** Set session["error"] to "No listings match your search" and return the session early. Stop here.
-   - **If no:** Pick the best result (first one), set session["selected_item"] = results[0], and proceed.
+3. **Check Search Results & Auto-Retry**:
+   - The agent checks if the list of results is empty.
+   - **If empty (zero results)**:
+     - It checks if any filter constraints (size or budget) were applied.
+     - If filters were used, it automatically relaxes them (first budget limit, then size filter, then both) and runs `search_listings` again.
+     - If it successfully finds items after relaxing filters, it sets a note in `session["adjustment_note"]` describing what was adjusted, and continues.
+     - If no items match even after removing filters (or if no filters were applied originally), the agent sets `session["error"]` with a suggestion statement and stops the run early.
+   - **If not empty**: It picks the top matching listing and stores it in `session["selected_item"]`.
 
-4. Call suggest_outfit with selected_item and wardrobe -> get back outfit suggestion string, store in session["outfit_suggestion"]
+4. **Price Assessment**: It calls `assess_price` on the selected item to compare its price against other items in the same category. It stores this reasoning string in `session["price_assessment"]`.
 
-5. Call create_fit_card with outfit_suggestion and selected_item -> get back caption string, store in session["fit_card"]
+5. **Suggest Outfit**: It calls `suggest_outfit` with `selected_item` and the user's `wardrobe`. If the wardrobe has items, it suggests combinations; if the wardrobe is empty, it generates general styling advice. It stores the output in `session["outfit_suggestion"]`.
 
-6. Return the completed session with all results filled in.
+6. **Create Fit Card**: It calls `create_fit_card` with `outfit_suggestion` and `selected_item` to write a 2-4 sentence caption for social media. It stores this in `session["fit_card"]`.
 
-**The agent only skips to the end if search_listings finds nothing.**
+7. **Return Session**: It returns the completed session to the user.
 
 ---
 
@@ -180,15 +185,23 @@ flowchart TD
     %% Step 3: Check Results
     FilterScore --> CheckResults{Are search results empty?}
     
-    %% Error Path (No results found)
-    CheckResults -->|Yes| Err["[ERROR] 'No listings found...' &rarr; return"]
+    %% Retry Decision / Loosened Constraints Flow
+    CheckResults -->|Yes| CheckFilters{Were filters applied?}
+    CheckFilters -->|Yes| RelaxFilters["Relax filters:<br/>1. Remove budget limit<br/>2. Remove size limit<br/>3. Remove both limits"]
+    RelaxFilters --> T_Search
+    
+    CheckFilters -->|No| Err["[ERROR] 'No listings found...' &rarr; return"]
     Err --> S_Error["Session: error = 'No listings...'"]
     
     %% Success Path
     CheckResults -->|No| S_Selected["Session: selected_item = results[0]"]
     
+    %% Price Assessment
+    S_Selected --> T_Assess["assess_price(selected_item)"]
+    T_Assess --> S_PriceAssess["Session: price_assessment = '...'"]
+    
     %% Step 4: Suggest Outfit
-    S_Selected --> T_Suggest["suggest_outfit(selected_item, wardrobe)"]
+    S_PriceAssess --> T_Suggest["suggest_outfit(selected_item, wardrobe)"]
     T_Suggest --> CheckWardrobe{Is wardrobe empty?}
     
     CheckWardrobe -->|Yes| LLM_General["Prompt Groq:<br/>General styling advice"]
@@ -223,9 +236,9 @@ flowchart TD
     
     class Loop,UI loop;
     class Err,S_Error,Card_Error,ErrUI,S_FitCard_Err error;
-    class S_Parsed,S_Selected,S_Outfit,S_FitCard_Success session;
-    class CheckQuery,CheckResults,CheckWardrobe,CheckOutfit decision;
-    class LLM_General,LLM_Wardrobe,LLM_Caption,DbRead,FilterScore,T_Parse,T_Search,T_Suggest,T_FitCard external;
+    class S_Parsed,S_Selected,S_Outfit,S_FitCard_Success,S_PriceAssess session;
+    class CheckQuery,CheckResults,CheckWardrobe,CheckOutfit,CheckFilters decision;
+    class LLM_General,LLM_Wardrobe,LLM_Caption,DbRead,FilterScore,T_Parse,T_Search,T_Suggest,T_FitCard,T_Assess external;
 ```
 
 ---
@@ -297,3 +310,31 @@ The user gets the top matching listing, a styling suggestion, and a short fit ca
 ### Instance 2: Creating Mock Tests for API Failure
 - **What I directed the AI to do:** I asked the AI to write unit tests that verify how `suggest_outfit` and `create_fit_card` behave when the Groq client raises a network exception.
 - **What I reviewed, revised, or overrode:** The generated test code tried to patch `groq.Groq` directly, which did not work because our tools instantiate the client through a helper function `_get_groq_client()`. I overrode the AI's approach by patching `tools._get_groq_client` instead to return a `MagicMock` client, which successfully raised the simulated exceptions. I also verified that the tool returned our specific fallback text instead of throwing unhandled errors.
+
+---
+
+## Implemented Stretch Features
+
+We implemented two stretch features:
+
+### 1. Price Assessment
+This feature analyzes the price of the found thrift item and compares it against other items of the same category in the dataset.
+- **How it works**:
+  - The tool looks at the category of the selected item (for example, "tops" or "bottoms").
+  - It finds all other listings in the dataset that belong to the same category.
+  - It calculates the average price of those items.
+  - It compares the price of the selected item to this average price.
+  - If the item's price is more than 5% below the average, it is marked as a "Good Deal".
+  - If the item's price is more than 5% above the average, it is marked as a "Premium Price".
+  - Otherwise, it is marked as "Fair Value".
+  - The final message displays the classification, the exact percentage difference, the category name, and the average price.
+
+### 2. Automatic Retry with Loosened Filters
+This feature automatically relaxes filters if a search returns zero results.
+- **How it works**:
+  - When the user searches with size or budget limits and no items match, the agent does not immediately give up.
+  - It automatically runs the search again after removing the budget limit.
+  - If that still returns no items, it runs the search again after removing the size limit instead.
+  - If that also fails, it removes both the size and budget limits to search solely by description.
+  - If any of these relaxed searches find an item, the agent continues the styling and caption steps.
+  - The agent displays an explanation note in the user interface showing which filter constraints were relaxed.

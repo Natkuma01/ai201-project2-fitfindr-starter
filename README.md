@@ -41,6 +41,9 @@ GROQ_API_KEY=your_key_here
 - Additional tool #4: `parse_query(query: str)`
   - Returns a dict with `description` (str), `size` (str or None), and `max_price` (float or None).
   - If the query is too vague, it can return an empty description and `None` for size and price.
+- Additional tool #5: `assess_price(item: dict)`
+  - Returns a short string comparing the item price to other listings in the same category.
+  - The assessment explains whether the item is a good deal, premium-priced, or fairly priced based on the category average.
 
 ## 💾 The Mock Listings Dataset
 
@@ -102,11 +105,13 @@ Information flows between the tools using the session dictionary:
 
 ## 🔁 Planning Loop and Conditional Logic
 
-The planning loop manages the steps the agent takes. It uses the following decisions:
+The planning loop manages the steps the agent takes. It uses the following decisions and steps:
 
-- **Check Search Results**: After searching for items, the agent checks if the list of results is empty.
-  - **If empty**: It stops immediately. It stores an error message in `session["error"]` and exits. It does not call `suggest_outfit` or `create_fit_card`. This prevents the agent from attempting to style an item that does not exist.
-  - **If not empty**: It picks the top listing and moves to the next step.
+- **Initialize & Parse**: The agent parses the user's natural language search query to find keywords, size, and price filters.
+- **Check Search Results & Auto-Retry**: After the search runs, the agent checks if the list of results is empty.
+  - **If empty**: The agent checks if size or price filters were used. If they were, the agent automatically retries the search by relaxing the filters (first relaxing budget, then size, then both). If a relaxed search finds items, it adds a note explaining what was adjusted and continues. If all searches fail, it stops immediately, saves a friendly message under `session["error"]`, and exits early.
+  - **If not empty**: It picks the top matching item and proceeds.
+- **Run Price Assessment**: Once an item is found, the agent compares its price against the average price of other items in the same category.
 - **Check Wardrobe**: Inside the outfit suggestion tool, the agent checks if the user's wardrobe list is empty.
   - **If empty**: It asks the LLM to give general styling advice for the item.
   - **If not empty**: It asks the LLM to create outfit combinations using specific, named clothes from the wardrobe.
@@ -142,3 +147,31 @@ Here is what happens when each tool fails:
 
 - **Instance 1 (Regex query parser)**: I directed the AI to write a regex parser to extract price limits and sizes. I reviewed the code and revised it because it failed on compound sizes like "S/M" and left messy prepositions in the product description.
 - **Instance 2 (API failure testing)**: I directed the AI to write unit tests for Groq API errors. I reviewed the code and overrode it to patch our helper function `_get_groq_client` rather than `groq.Groq` directly so the tests would run correctly.
+
+---
+
+## 🚀 Implemented Stretch Features
+
+We implemented two stretch features:
+
+### 1. Price Assessment
+This feature analyzes the price of the found thrift item and compares it against other items of the same category in the dataset.
+- **How it works**:
+  - The tool looks at the category of the selected item (for example, "tops" or "bottoms").
+  - It finds all other listings in the dataset that belong to the same category.
+  - It calculates the average price of those items.
+  - It compares the price of the selected item to this average price.
+  - If the item's price is more than 5% below the average, it is marked as a "Good Deal".
+  - If the item's price is more than 5% above the average, it is marked as a "Premium Price".
+  - Otherwise, it is marked as "Fair Value".
+  - The final message displays the classification, the exact percentage difference, the category name, and the average price.
+
+### 2. Automatic Retry with Loosened Filters
+This feature automatically relaxes filters if a search returns zero results.
+- **How it works**:
+  - When the user searches with size or budget limits and no items match, the agent does not immediately give up.
+  - It automatically runs the search again after removing the budget limit.
+  - If that still returns no items, it runs the search again after removing the size limit instead.
+  - If that also fails, it removes both the size and budget limits to search solely by description.
+  - If any of these relaxed searches find an item, the agent continues the styling and caption steps.
+  - The agent displays an explanation note in the user interface showing which filter constraints were relaxed.

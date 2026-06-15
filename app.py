@@ -67,10 +67,20 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
     brand = selected_item.get("brand") or "Unknown brand"
     price = selected_item.get("price")
     price_text = f"${price:.2f}" if isinstance(price, (int, float)) else str(price)
+    
+    # Prepend filter adjustments note if one occurred
+    adjustment_header = ""
+    if session.get("adjustment_note"):
+        adjustment_header = f"⚠️ Filter Adjustment: {session['adjustment_note']}\n\n"
+        
+    price_assess = session.get("price_assessment") or "No price assessment available."
+    
     listing_text = (
+        f"{adjustment_header}"
         f"{selected_item.get('title', 'Unknown item')}\n"
         f"Size: {selected_item.get('size', 'N/A')} | Price: {price_text}\n"
-        f"Brand: {brand} | Platform: {selected_item.get('platform', 'N/A')}\n\n"
+        f"Brand: {brand} | Platform: {selected_item.get('platform', 'N/A')}\n"
+        f"Price Analysis: {price_assess}\n\n"
         f"{selected_item.get('description', '')}"
     )
 
@@ -79,10 +89,9 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
 
 EXAMPLE_QUERIES = [
     "vintage graphic tee under $30",
-    "90s track jacket in size M",
-    "flowy midi skirt under $40",
+    "vintage graphic tee size S under $5",
+    "designer ballgown size XXS under $5",
     "black combat boots size 8",
-    "designer ballgown size XXS under $5",   # deliberate no-results test
 ]
 
 def build_interface():

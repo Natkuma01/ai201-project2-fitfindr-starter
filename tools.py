@@ -348,3 +348,35 @@ Style Guidelines:
             f"❌ Error: Failed to generate fit card caption due to an API error. ({e}) ⚠️ "
             "Suggestion: Please check your internet connection or Groq API key configuration and try again."
         )
+
+def assess_price(item: dict) -> str:
+    """
+    Compare the item's price against other items in the same category in the dataset.
+    Returns a string assessment with reasoning.
+    """
+    category = item.get("category")
+    price = item.get("price")
+    if not category or price is None:
+        return "No price assessment available."
+    
+    from utils.data_loader import load_listings
+    listings = load_listings()
+    
+    # Find comparable items in the same category
+    comparables = [x for x in listings if x.get("category") == category and x.get("price") is not None]
+    if not comparables:
+        return f"No other items in the '{category}' category to compare price."
+        
+    prices = [float(x["price"]) for x in comparables]
+    avg_price = sum(prices) / len(prices)
+    
+    diff_pct = ((price - avg_price) / avg_price) * 100
+    
+    reasoning = f"Based on {len(comparables)} items in the '{category}' category (average price: ${avg_price:.2f})."
+    
+    if diff_pct < -5:
+        return f"🔥 Good Deal: Priced at ${price:.2f}, which is {abs(diff_pct):.1f}% below the category average. {reasoning}"
+    elif diff_pct > 5:
+        return f"💎 Premium Price: Priced at ${price:.2f}, which is {diff_pct:.1f}% above the category average. {reasoning}"
+    else:
+        return f"⚖️ Fair Value: Priced at ${price:.2f}, which is close to the category average. {reasoning}"
