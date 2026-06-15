@@ -109,7 +109,25 @@ If the query is empty or too vague to extract anything useful, return a dict wit
 ## State Management
 
 **How does information from one tool get passed to the next?**
-<!-- Describe how your agent stores and accesses state within a session. What data is tracked? How is it passed between tool calls? -->
+The agent keeps all interaction data in a single session dictionary. The session is created by `_new_session()` and starts with these keys:
+
+- `query`: the original user text.
+- `parsed`: empty at first, then filled with `description`, `size`, and `max_price` after `parse_query()` runs.
+- `search_results`: starts empty, then stores the list returned by `search_listings()`.
+- `selected_item`: starts as `None`, then holds the top listing chosen from `search_results`.
+- `wardrobe`: the user's wardrobe dict, available throughout the interaction.
+- `outfit_suggestion`: starts as `None`, then holds the string returned by `suggest_outfit()`.
+- `fit_card`: starts as `None`, then holds the caption returned by `create_fit_card()`.
+- `error`: starts as `None`, and is set if an early exit happens (for example, no matches were found).
+
+The tools pass data between them like this:
+- `parse_query()` turns the user query into structured parameters and stores them in `session["parsed"]`.
+- `search_listings()` reads `session["parsed"]` and writes its results into `session["search_results"]`.
+- The agent picks the best result from `session["search_results"]` and puts it in `session["selected_item"]`.
+- `suggest_outfit()` uses `session["selected_item"]` and `session["wardrobe"]`, then stores its output in `session["outfit_suggestion"]`.
+- `create_fit_card()` uses `session["outfit_suggestion"]` and `session["selected_item"]`, then stores its output in `session["fit_card"]`.
+
+If `search_listings()` returns no results, the agent sets `session["error"]` and stops before calling the later tools.
 
 ---
 
@@ -119,9 +137,22 @@ For each tool, describe the specific failure mode you're handling and what the a
 
 | Tool | Failure mode | Agent response |
 |------|-------------|----------------|
-| search_listings | No results match the query | |
-| suggest_outfit | Wardrobe is empty | |
-| create_fit_card | Outfit input is missing or incomplete | |
+| search_listings | No results match the query | The tool returns an empty list `[]`. The planning loop checks this, sets `session["error"]` with a suggestion statement, and returns the session early without running other tools. |
+| search_listings | Corrupted listing dataset (e.g. invalid price type) | The tool skips the corrupted listing using a try-except block and continues matching and returning valid items. |
+| suggest_outfit | Wardrobe is empty or missing | The tool handles this by prompting the LLM for general style advice and generic styling combinations. |
+| suggest_outfit | Groq API call fails or returns empty response | The tool catches the exception, logs it, and returns a user-friendly error message with suggestion statement (error code `OUTFIT_GEN_01`). |
+| create_fit_card | Outfit suggestion is missing or empty | The tool immediately returns an error string advising the user to get a valid outfit suggestion first. |
+| create_fit_card | Groq API call fails | The tool catches the error and returns a friendly error message including a suggestion statement. |
+
+### Concrete Examples from Testing
+
+Here are specific testing scenarios from our test suite:
+1. **Search Empty Results:** In `test_search_empty_results`, running a query for `designer ballgown size XXS under $5` yields `[]` without raising any exceptions, leading to a graceful early exit.
+2. **Search Price Error:** In `test_search_listings_invalid_price`, we mocked a listing with a price of `"not-a-float"`. The tool successfully ignored this item and returned only valid items.
+3. **Empty Wardrobe Styling:** In `test_suggest_outfit_empty_wardrobe`, when passing `{"items": []}`, the tool formats the prompt with "My wardrobe is currently empty" and successfully obtains general advice.
+4. **Suggest API Error:** In `test_suggest_outfit_api_failure`, we mocked a Groq client exception. The tool returned the friendly string containing the support code `OUTFIT_GEN_01`.
+5. **Fit Card Empty Outfit:** In `test_create_fit_card_empty_outfit`, passing an empty string returned the error string starting with `⛔️ Error: Cannot generate fit card...` instructing the user to try adjusting search keywords.
+6. **Fit Card API Error:** In `test_create_fit_card_api_failure`, we simulated a Groq rate limit exception. The tool returned an error string starting with `❌ Error: Failed to generate fit card caption due to an API error...` suggesting checking network/API setup.
 
 ---
 
@@ -218,22 +249,51 @@ I'll give Claude the full planning.md file and ask it to implement run_agent() i
 ---
 
 ## A Complete Interaction (Step by Step)
-The FitFindr takes the user’s text query and chosen wardrobe, then turn that into a search, outfit idea, and fit card. 
-The search_listings function from the tools.py is triggered first by the parsed query and returns matching thrift listings. If it finds nothing, the app stops and displays an error. If a listing is found, suggest_outfit is triggered next with the selected item and the user’s wardrobe to create styling ideas. 
-Lastly, create_fit_card function makes a short caption from the outfit suggestion and item details.
+FitFindr turns the user's question and wardrobe into a thrift item recommendation, a styling idea, and a short caption.
 
-Write out what a full user interaction looks like from start to finish — tool call by tool call. Use a specific example query.
+The tool order is:
+- `parse_query` pulls out the item description, size, and price from the user's words.
+- `search_listings` finds thrift items that match those filters.
+- `suggest_outfit` uses the chosen item and the user's wardrobe to make styling suggestions.
+- `create_fit_card` writes a short caption based on the outfit idea and item details.
+
+Use a concrete example to show the full flow.
 
 **Example user query:** "I'm looking for a vintage graphic tee under $30. I mostly wear baggy jeans and chunky sneakers. What's out there and how would I style it?"
 
 **Step 1:**
-Now the agent reads the query, pulls out the item description, size, and price, and calls the serach_listing function from the tools.py file, with that info.
+The agent calls `parse_query(query)` to turn the text into `description`, `size`, and `max_price`. This makes the user's request easier for the next tool to use.
 
 **Step 2:**
-The seach_listings function retrn matching thrift items, the agent picks the best one, and then calls the suggest_outfit function with that item plus the user's wardrobe
+The agent calls `search_listings(description, size, max_price)` to find matching thrift items. We do this first because we need a real item before making outfit or caption suggestions.
 
 **Step 3:**
-The suggest_outfit function returns styling ideas, and the agent calls the create_fit_card function with the outfit text and the selected item.
+If `search_listings` finds no items, the agent stops and tells the user nothing matched. If it finds items, the agent picks the best one and moves on.
+
+**Step 4:**
+The agent calls `suggest_outfit(selected_item, wardrobe)` so it can make the look feel personal. If the wardrobe has items, it suggests how to wear the thrift find with those pieces. If the wardrobe is empty, it gives general styling advice.
+
+**Step 5:**
+The agent calls `create_fit_card(outfit_suggestion, selected_item)` to make a short social caption. This is last because it needs the outfit idea and the item details.
 
 **Final output to user:**
-The user gets the top listing, a simple outfit suggestion, and a short fit card caption.
+The user gets the top matching listing, a styling suggestion, and a short fit card caption.
+
+---
+
+## Spec Reflection
+
+- **One way the spec helped:** Having clear inputs and return values in the specification helped write correct prompts for the LLM. It was easy to design prompt templates that only asked for the specific information needed by each tool without generating unnecessary conversational noise.
+- **One divergence and why:** We added a helper tool called `parse_query` that extracts parameters from the user's natural language using regular expressions. This was a divergence because the original specification did not mandate how queries were parsed, but we implemented it as a separate tool to keep the matching logic in `search_listings` clean and decoupled from the natural language processing.
+
+---
+
+## AI Tool Use Reflection
+
+### Instance 1: Generating the Query Parser Regex
+- **What I directed the AI to do:** I directed the AI to write a Python function that uses regular expressions to extract a price limit (like "under $30") and a size (like "size M") from a text string, and then returns the remaining text as the product description.
+- **What I reviewed, revised, or overrode:** I reviewed the AI-generated regex patterns and found that they failed when there were leading or trailing spaces, or when the user typed a size like "S/M" or "XXS". I revised the pattern to support a wider range of sizes (characters like `/` and `+`) and wrote a loop to clean up leading/trailing prepositions (like "looking for a") from the final product description.
+
+### Instance 2: Creating Mock Tests for API Failure
+- **What I directed the AI to do:** I asked the AI to write unit tests that verify how `suggest_outfit` and `create_fit_card` behave when the Groq client raises a network exception.
+- **What I reviewed, revised, or overrode:** The generated test code tried to patch `groq.Groq` directly, which did not work because our tools instantiate the client through a helper function `_get_groq_client()`. I overrode the AI's approach by patching `tools._get_groq_client` instead to return a `MagicMock` client, which successfully raised the simulated exceptions. I also verified that the tool returned our specific fallback text instead of throwing unhandled errors.

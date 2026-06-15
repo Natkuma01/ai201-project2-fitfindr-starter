@@ -184,7 +184,10 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     session["search_results"] = results
 
     if not results:
-        session["error"] = "🔍 No listings match your search. Try adjusting your keywords! 🛍️"
+        session["error"] = (
+            "🔍 No listings match your search. "
+            "Suggestion: Try searching for a different item description, removing size/price filters, or using broader keywords! 🛍️"
+        )
         return session
 
     # Step 4: Select the item to use (e.g., the top result).
@@ -226,3 +229,13 @@ if __name__ == "__main__":
         wardrobe=get_example_wardrobe(),
     )
     print(f"Error message: {session2['error']}")
+
+    print("\n\n=== Deliberately Triggered Failure Path (API Connection Failure) ===\n")
+    from unittest.mock import patch
+    with patch("groq.resources.chat.completions.Completions.create", side_effect=Exception("Connection timed out")):
+        session3 = run_agent(
+            query="vintage graphic tee under $30",
+            wardrobe=get_example_wardrobe(),
+        )
+        print(f"Agent outfit suggestion fallback: {session3['outfit_suggestion']}")
+        print(f"Agent fit card fallback: {session3['fit_card']}")

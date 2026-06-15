@@ -283,11 +283,15 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     # Guard against an empty or whitespace-only outfit string.
     if not outfit or not outfit.strip():
         return (
-            "⛔️ Error: Cannot generate fit card because there are no outfit match with your item. I suggest you do not buy this item! ☠️💀🤢"
+            "⛔️ Error: Cannot generate fit card because there are no outfit match with your item. "
+            "Suggestion: Try adjusting your search keywords to find other listings, or add more items to your wardrobe so we can create a styled combination."
         )
         
     if not new_item or not isinstance(new_item, dict):
-        return "⚠️ Error: Cannot generate fit card because the thrift item details are missing. 🛍️"
+        return (
+            "⚠️ Error: Cannot generate fit card because the thrift item details are missing. 🛍️ "
+            "Suggestion: Make sure that search_listings found a valid item and passed it to the agent."
+        )
 
     client = _get_groq_client()
 
@@ -340,4 +344,7 @@ Style Guidelines:
         return caption
     except Exception as e:
         print(f"Error generating fit card: {e}")
-        return f"❌ Error: Failed to generate fit card caption due to an API error. ({e}) ⚠️"
+        return (
+            f"❌ Error: Failed to generate fit card caption due to an API error. ({e}) ⚠️ "
+            "Suggestion: Please check your internet connection or Groq API key configuration and try again."
+        )
