@@ -15,6 +15,13 @@ ai201-project2-fitfindr-starter/
 └── requirements.txt           # Python dependencies
 ```
 
+## 🎥 Project Walkthrough
+
+Click the thumbnail below to watch a full walkthrough of the project.
+
+[![Project Walkthrough](https://img.youtube.com/vi/8Ym9jsuVVUE/maxresdefault.jpg)](https://www.youtube.com/watch?v=8Ym9jsuVVUE)
+
+
 ## ⚙️ Setup
 
 ```bash
